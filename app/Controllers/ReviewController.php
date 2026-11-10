@@ -33,12 +33,13 @@ class ReviewController extends Controller {
             $this->redirect('/login');
         }
 
-        $orderId = (int)($_POST['order_id'] ?? 0);
-        $rating = (int)($_POST['rating'] ?? 5);
+        $orderId = filter_var($_POST['order_id'] ?? null, FILTER_VALIDATE_INT);
+        $rating = filter_var($_POST['rating'] ?? null, FILTER_VALIDATE_INT);
         $comment = trim($_POST['comment'] ?? '');
 
-        if ($rating < 1 || $rating > 5) {
-            $rating = 5;
+        if (!$orderId || $orderId <= 0 || !$rating || $rating < 1 || $rating > 5 || strlen($comment) > 8000) {
+            $this->flash('error', 'Đơn hàng, số sao hoặc nội dung đánh giá không hợp lệ.');
+            $this->redirect('/orders/buyer');
         }
 
         $order = $this->orderModel->find($orderId);
@@ -93,4 +94,3 @@ class ReviewController extends Controller {
         ]);
     }
 }
-

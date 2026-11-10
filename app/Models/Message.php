@@ -19,10 +19,15 @@ class Message extends Model {
         $sql = "SELECT m.*, u.full_name as sender_name, u.avatar as sender_avatar 
                 FROM `{$this->table}` m
                 JOIN `users` u ON m.sender_id = u.id
-                WHERE ((m.sender_id = :u1 AND m.receiver_id = :u2) 
-                   OR  (m.sender_id = :u2 AND m.receiver_id = :u1))";
+                WHERE ((m.sender_id = :sender_one AND m.receiver_id = :receiver_one)
+                   OR  (m.sender_id = :sender_two AND m.receiver_id = :receiver_two))";
         
-        $params = ['u1' => $user1Id, 'u2' => $user2Id];
+        $params = [
+            'sender_one' => $user1Id,
+            'receiver_one' => $user2Id,
+            'sender_two' => $user2Id,
+            'receiver_two' => $user1Id
+        ];
 
         if ($productId) {
             $sql .= " AND m.product_id = :product_id";
@@ -40,29 +45,41 @@ class Message extends Model {
      * Lấy danh sách các cuộc trò chuyện gần đây của 1 user
      */
     public function getRecentConversations(int $userId): array {
-        $sql = "SELECT 
-                    CASE 
-                        WHEN m.sender_id = :uid THEN m.receiver_id 
-                        ELSE m.sender_id 
-                    END AS partner_id,
-                    u.full_name AS partner_name,
-                    u.avatar AS partner_avatar,
-                    p.id AS product_id,
-                    p.title AS product_title,
-                    p.image AS product_image,
-                    p.price AS product_price,
-                    m.message AS last_message,
-                    m.created_at AS last_time,
-                    SUM(CASE WHEN m.receiver_id = :uid AND m.is_read = 0 THEN 1 ELSE 0 END) AS unread_count
-                FROM `{$this->table}` m
-                JOIN `users` u ON u.id = (CASE WHEN m.sender_id = :uid THEN m.receiver_id ELSE m.sender_id END)
-                LEFT JOIN `products` p ON m.product_id = p.id
-                WHERE m.sender_id = :uid OR m.receiver_id = :uid
-                GROUP BY partner_id, product_id
-                ORDER BY last_time DESC";
+        $sql = "SELECT latest.partner_id,
+                       u.full_name AS partner_name,
+                       u.avatar AS partner_avatar,
+                       p.id AS product_id,
+                       p.title AS product_title,
+                       p.image AS product_image,
+                       p.price AS product_price,
+                       m.message AS last_message,
+                       m.created_at AS last_time,
+                       (SELECT COUNT(*)
+                        FROM `{$this->table}` unread
+                        WHERE unread.sender_id = latest.partner_id
+                          AND unread.receiver_id = :uid_unread
+                          AND unread.is_read = 0
+                          AND unread.product_id <=> latest.product_id) AS unread_count
+                FROM (
+                    SELECT CASE WHEN sender_id = :uid_case THEN receiver_id ELSE sender_id END AS partner_id,
+                           product_id,
+                           MAX(id) AS last_message_id
+                    FROM `{$this->table}`
+                    WHERE sender_id = :uid_sender OR receiver_id = :uid_receiver
+                    GROUP BY partner_id, product_id
+                ) latest
+                JOIN `{$this->table}` m ON m.id = latest.last_message_id
+                JOIN `users` u ON u.id = latest.partner_id
+                LEFT JOIN `products` p ON p.id = latest.product_id
+                ORDER BY m.id DESC";
 
         $stmt = $this->db->prepare($sql);
-        $stmt->execute(['uid' => $userId]);
+        $stmt->execute([
+            'uid_unread' => $userId,
+            'uid_case' => $userId,
+            'uid_sender' => $userId,
+            'uid_receiver' => $userId
+        ]);
         return $stmt->fetchAll();
     }
 
@@ -84,4 +101,3 @@ class Message extends Model {
         return $stmt->execute($params);
     }
 }
-

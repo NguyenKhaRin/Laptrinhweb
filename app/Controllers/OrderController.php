@@ -10,15 +10,13 @@ namespace App\Controllers;
 
 use App\Core\Controller;
 use App\Models\Order;
-use App\Models\Product;
+use DomainException;
 
 class OrderController extends Controller {
     private Order $orderModel;
-    private Product $productModel;
 
     public function __construct() {
         $this->orderModel = new Order();
-        $this->productModel = new Product();
     }
 
     /**
@@ -30,44 +28,31 @@ class OrderController extends Controller {
             $this->redirect('/login');
         }
 
-        $productId = (int)($_POST['product_id'] ?? 0);
+        $productId = filter_var($_POST['product_id'] ?? null, FILTER_VALIDATE_INT);
         $phone = trim($_POST['phone'] ?? '');
         $address = trim($_POST['shipping_address'] ?? '');
         $notes = trim($_POST['notes'] ?? '');
 
-        $product = $this->productModel->find($productId);
-
-        if (!$product || $product['status'] !== 'available') {
-            $this->flash('error', 'Sản phẩm này hiện không còn khả dụng để đặt mua.');
-            $this->redirect('/');
-        }
-
-        if ($product['user_id'] == $user['id']) {
-            $this->flash('error', 'Bạn không thể tự mua sản phẩm do chính mình đăng bán!');
-            $this->redirect('/products/detail/' . $productId);
-        }
-
-        if (empty($phone) || empty($address)) {
+        if (!$productId || $productId <= 0 || $phone === '' || $address === ''
+            || strlen($phone) > 20 || strlen($address) > 255) {
             $this->flash('error', 'Vui lòng cung cấp số điện thoại và địa chỉ nhận hàng.');
-            $this->redirect('/products/detail/' . $productId);
+            $this->redirect($productId ? '/products/detail/' . $productId : '/');
         }
 
-        $orderCode = 'ORD-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -5));
-
-        $orderId = $this->orderModel->create([
-            'order_code'       => $orderCode,
-            'buyer_id'         => $user['id'],
-            'seller_id'        => $product['user_id'],
-            'product_id'       => $productId,
-            'total_price'      => $product['price'],
-            'shipping_address' => $address,
-            'phone'            => $phone,
-            'notes'            => $notes,
-            'status'           => 'pending'
-        ]);
-
-        // Cập nhật trạng thái sản phẩm sang 'reserved' (đã có người đặt)
-        $this->productModel->update($productId, ['status' => 'reserved']);
+        $orderCode = 'ORD-' . date('Ymd') . '-' . strtoupper(bin2hex(random_bytes(4)));
+        try {
+            $orderId = $this->orderModel->createForAvailableProduct(
+                $productId,
+                (int)$user['id'],
+                $orderCode,
+                $address,
+                $phone,
+                $notes !== '' ? $notes : null
+            );
+        } catch (DomainException $exception) {
+            $this->flash('error', $exception->getMessage());
+            $this->redirect('/products/detail/' . $productId);
+        }
 
         $this->flash('success', "Đặt hàng thành công! Mã đơn: {$orderCode}");
         $this->redirect('/orders/detail/' . $orderId);
@@ -156,25 +141,15 @@ class OrderController extends Controller {
             $this->redirect('/orders/detail/' . $orderId);
         }
 
-        $order = $this->orderModel->find($orderId);
-        if (!$order) {
-            $this->redirect('/');
-        }
-
-        // Kiểm tra quyền cập nhật
-        if ($order['seller_id'] != $user['id'] && $order['buyer_id'] != $user['id']) {
-            $this->flash('error', 'Bạn không có quyền cập nhật đơn này.');
-            $this->redirect('/orders/detail/' . $orderId);
-        }
-
-        $this->orderModel->updateStatus($orderId, $status);
-
-        // Nếu hoàn thành đơn hàng -> chuyển sản phẩm thành sold
-        if ($status === 'completed') {
-            $this->productModel->update($order['product_id'], ['status' => 'sold']);
-        } elseif ($status === 'cancelled') {
-            // Nếu hủy -> trả sản phẩm về available
-            $this->productModel->update($order['product_id'], ['status' => 'available']);
+        try {
+            $this->orderModel->transitionStatus($orderId, (int)$user['id'], $status);
+        } catch (DomainException $exception) {
+            if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+                $this->json(['success' => false, 'message' => $exception->getMessage()], 409);
+                return;
+            }
+            $this->flash('error', $exception->getMessage());
+            $this->redirect($orderId > 0 ? '/orders/detail/' . $orderId : '/orders/buyer');
         }
 
         // Hỗ trợ AJAX
@@ -187,4 +162,3 @@ class OrderController extends Controller {
         $this->redirect('/orders/detail/' . $orderId);
     }
 }
-

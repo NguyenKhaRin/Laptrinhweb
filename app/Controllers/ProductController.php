@@ -11,6 +11,7 @@ namespace App\Controllers;
 use App\Core\Controller;
 use App\Models\Product;
 use App\Models\User;
+use DomainException;
 
 class ProductController extends Controller {
     private Product $productModel;
@@ -113,25 +114,19 @@ class ProductController extends Controller {
         $location = trim($_POST['location'] ?? '');
         $description = trim($_POST['description'] ?? '');
 
-        if (empty($title) || $categoryId <= 0 || $price <= 0 || empty($location)) {
+        if ($title === '' || strlen($title) > 255 || $categoryId <= 0 || $price <= 0
+            || ($originalPrice !== null && $originalPrice <= 0)
+            || !in_array($condition, ['new', 'like_new', 'good', 'fair'], true)
+            || $location === '' || strlen($location) > 150 || $description === '') {
             $this->flash('error', 'Vui lòng điền đầy đủ các thông tin bắt buộc.');
             $this->redirect('/products/create');
         }
 
-        // Xử lý upload ảnh
-        $imageUrl = 'https://images.unsplash.com/photo-1588872657578-7efd1f1555ed?w=600'; // Mặc định
-        if (!empty($_FILES['image']['name'])) {
-            $uploadDir = UPLOAD_PATH . DIRECTORY_SEPARATOR . 'products' . DIRECTORY_SEPARATOR;
-            if (!is_dir($uploadDir)) {
-                mkdir($uploadDir, 0777, true);
-            }
-
-            $fileName = time() . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '', $_FILES['image']['name']);
-            $targetPath = $uploadDir . $fileName;
-
-            if (move_uploaded_file($_FILES['image']['tmp_name'], $targetPath)) {
-                $imageUrl = UPLOAD_URL . '/products/' . $fileName;
-            }
+        try {
+            $imageUrl = $this->uploadProductImage($_FILES['image'] ?? []);
+        } catch (DomainException $exception) {
+            $this->flash('error', $exception->getMessage());
+            $this->redirect('/products/create');
         }
 
         $productId = $this->productModel->create([
@@ -228,8 +223,22 @@ class ProductController extends Controller {
         $description = trim($_POST['description'] ?? '');
         $status = $_POST['status'] ?? $product['status'];
 
-        if (empty($title) || $categoryId <= 0 || $price <= 0 || empty($location)) {
+        if ($title === '' || strlen($title) > 255 || $categoryId <= 0 || $price <= 0
+            || ($originalPrice !== null && $originalPrice <= 0)
+            || !in_array($condition, ['new', 'like_new', 'good', 'fair'], true)
+            || $location === '' || strlen($location) > 150 || $description === '') {
             $this->flash('error', 'Vui lòng điền đầy đủ các thông tin bắt buộc.');
+            $this->redirect('/products/edit/' . $id);
+        }
+
+        $allowedStatuses = ['available', 'hidden'];
+        if (!in_array($status, $allowedStatuses, true) && $status !== $product['status']) {
+            $this->flash('error', 'Trạng thái sản phẩm không hợp lệ.');
+            $this->redirect('/products/edit/' . $id);
+        }
+
+        if (in_array($product['status'], ['reserved', 'sold'], true) && $status !== $product['status']) {
+            $this->flash('error', 'Không thể thay đổi trạng thái sản phẩm đang giao dịch hoặc đã bán.');
             $this->redirect('/products/edit/' . $id);
         }
 
@@ -244,12 +253,12 @@ class ProductController extends Controller {
             'status'         => $status
         ];
 
-        // Nếu có upload ảnh mới
         if (!empty($_FILES['image']['name'])) {
-            $uploadDir = UPLOAD_PATH . DIRECTORY_SEPARATOR . 'products' . DIRECTORY_SEPARATOR;
-            $fileName = time() . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '', $_FILES['image']['name']);
-            if (move_uploaded_file($_FILES['image']['tmp_name'], $uploadDir . $fileName)) {
-                $updateData['image'] = UPLOAD_URL . '/products/' . $fileName;
+            try {
+                $updateData['image'] = $this->uploadProductImage($_FILES['image']);
+            } catch (DomainException $exception) {
+                $this->flash('error', $exception->getMessage());
+                $this->redirect('/products/edit/' . $id);
             }
         }
 
@@ -271,9 +280,47 @@ class ProductController extends Controller {
             $this->redirect('/');
         }
 
-        $this->productModel->delete($id);
-        $this->flash('success', 'Đã xóa bài đăng bán thành công!');
+        if (!in_array($product['status'], ['available', 'hidden'], true)) {
+            $this->flash('error', 'Không thể xóa sản phẩm đang giao dịch hoặc đã bán.');
+            $this->redirect('/products/detail/' . $id);
+        }
+
+        $this->productModel->update($id, ['status' => 'hidden']);
+        $this->flash('success', 'Đã ẩn bài đăng bán. Lịch sử giao dịch được giữ nguyên.');
         $this->redirect('/profile/seller/' . $user['id']);
     }
-}
 
+    private function uploadProductImage(array $file): string {
+        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            throw new DomainException('Vui lòng chọn ảnh sản phẩm hợp lệ để tải lên.');
+        }
+
+        $maxFileSize = (int)env('UPLOAD_MAX_FILESIZE', 5242880);
+        if (empty($file['tmp_name']) || !is_uploaded_file($file['tmp_name'])
+            || (int)($file['size'] ?? 0) <= 0 || (int)$file['size'] > $maxFileSize) {
+            throw new DomainException('Ảnh không hợp lệ hoặc vượt quá dung lượng cho phép.');
+        }
+
+        $mimeType = (new \finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']);
+        $extensions = [
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp'
+        ];
+        if (!isset($extensions[$mimeType]) || !getimagesize($file['tmp_name'])) {
+            throw new DomainException('Ảnh phải có định dạng JPG, PNG hoặc WEBP.');
+        }
+
+        $uploadDir = UPLOAD_PATH . DIRECTORY_SEPARATOR . 'products';
+        if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true) && !is_dir($uploadDir)) {
+            throw new DomainException('Không thể tạo thư mục lưu ảnh sản phẩm.');
+        }
+
+        $fileName = bin2hex(random_bytes(16)) . '.' . $extensions[$mimeType];
+        if (!move_uploaded_file($file['tmp_name'], $uploadDir . DIRECTORY_SEPARATOR . $fileName)) {
+            throw new DomainException('Không thể lưu ảnh sản phẩm. Vui lòng thử lại.');
+        }
+
+        return UPLOAD_URL . '/products/' . $fileName;
+    }
+}

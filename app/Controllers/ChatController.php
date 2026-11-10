@@ -36,11 +36,16 @@ class ChatController extends Controller {
         $conversations = $this->messageModel->getRecentConversations($user['id']);
 
         // Nếu có truyền đối tác qua URL query (?partner_id=...&product_id=...)
-        $activePartnerId = isset($_GET['partner_id']) ? (int)$_GET['partner_id'] : null;
-        $activeProductId = isset($_GET['product_id']) ? (int)$_GET['product_id'] : null;
+        $activePartnerId = filter_var($_GET['partner_id'] ?? null, FILTER_VALIDATE_INT);
+        $activeProductId = filter_var($_GET['product_id'] ?? null, FILTER_VALIDATE_INT);
+        $activeProductId = $activeProductId && $activeProductId > 0 ? $activeProductId : null;
+        $activePartner = null;
+        $activeProduct = null;
 
-        $activePartner = $activePartnerId ? $this->userModel->find($activePartnerId) : null;
-        $activeProduct = $activeProductId ? $this->productModel->find($activeProductId) : null;
+        if ($activePartnerId && $this->isValidConversation((int)$user['id'], $activePartnerId, $activeProductId)) {
+            $activePartner = $this->userModel->find($activePartnerId);
+            $activeProduct = $activeProductId ? $this->productModel->find($activeProductId) : null;
+        }
 
         $this->view('chat/inbox', [
             'pageTitle'       => 'Hộp thư trao đổi',
@@ -59,11 +64,16 @@ class ChatController extends Controller {
             $this->json(['error' => 'Chưa đăng nhập'], 401);
         }
 
-        $partnerId = (int)($_GET['partner_id'] ?? 0);
-        $productId = !empty($_GET['product_id']) ? (int)$_GET['product_id'] : null;
+        $partnerId = filter_var($_GET['partner_id'] ?? null, FILTER_VALIDATE_INT);
+        $productId = !empty($_GET['product_id']) ? filter_var($_GET['product_id'], FILTER_VALIDATE_INT) : null;
 
-        if ($partnerId <= 0) {
+        if (!$partnerId || $partnerId <= 0 || $partnerId === (int)$user['id']
+            || ($productId !== null && (!$productId || $productId <= 0))) {
             $this->json(['error' => 'Đối tác không hợp lệ'], 400);
+        }
+
+        if (!$this->isValidConversation((int)$user['id'], $partnerId, $productId)) {
+            $this->json(['error' => 'Cuộc trò chuyện hoặc sản phẩm không hợp lệ'], 404);
         }
 
         // Đánh dấu là đã đọc
@@ -87,12 +97,18 @@ class ChatController extends Controller {
             $this->json(['error' => 'Chưa đăng nhập'], 401);
         }
 
-        $receiverId = (int)($_POST['receiver_id'] ?? 0);
-        $productId = !empty($_POST['product_id']) ? (int)$_POST['product_id'] : null;
+        $receiverId = filter_var($_POST['receiver_id'] ?? null, FILTER_VALIDATE_INT);
+        $productId = !empty($_POST['product_id']) ? filter_var($_POST['product_id'], FILTER_VALIDATE_INT) : null;
         $messageText = trim($_POST['message'] ?? '');
 
-        if ($receiverId <= 0 || empty($messageText)) {
-            $this->json(['error' => 'Nội dung tin nhắn không được để trống'], 400);
+        if (!$receiverId || $receiverId <= 0 || $receiverId === (int)$user['id']
+            || $messageText === '' || strlen($messageText) > 8000
+            || ($productId !== null && (!$productId || $productId <= 0))) {
+            $this->json(['error' => 'Đối tác hoặc nội dung tin nhắn không hợp lệ'], 400);
+        }
+
+        if (!$this->isValidConversation((int)$user['id'], $receiverId, $productId)) {
+            $this->json(['error' => 'Cuộc trò chuyện hoặc sản phẩm không hợp lệ'], 404);
         }
 
         $id = $this->messageModel->create([
@@ -111,5 +127,18 @@ class ChatController extends Controller {
             'my_id'   => $user['id']
         ]);
     }
-}
 
+    private function isValidConversation(int $userId, int $partnerId, ?int $productId): bool {
+        if ($partnerId <= 0 || $partnerId === $userId || !$this->userModel->find($partnerId)) {
+            return false;
+        }
+
+        if ($productId === null) {
+            return true;
+        }
+
+        $product = $this->productModel->find($productId);
+        return $product !== null
+            && ((int)$product['user_id'] === $userId || (int)$product['user_id'] === $partnerId);
+    }
+}

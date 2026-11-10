@@ -8,9 +8,147 @@
 namespace App\Models;
 
 use App\Core\Model;
+use DomainException;
+use Throwable;
 
 class Order extends Model {
     protected string $table = 'orders';
+
+    /**
+     * Tạo đơn và giữ chỗ sản phẩm trong cùng một transaction.
+     */
+    public function createForAvailableProduct(
+        int $productId,
+        int $buyerId,
+        string $orderCode,
+        string $shippingAddress,
+        string $phone,
+        ?string $notes
+    ): int {
+        $this->db->beginTransaction();
+
+        try {
+            $stmt = $this->db->prepare(
+                "SELECT `user_id`, `price`, `status` FROM `products` WHERE `id` = :id FOR UPDATE"
+            );
+            $stmt->execute(['id' => $productId]);
+            $product = $stmt->fetch();
+
+            if (!$product || $product['status'] !== 'available') {
+                throw new DomainException('Sản phẩm này hiện không còn khả dụng để đặt mua.');
+            }
+
+            if ((int)$product['user_id'] === $buyerId) {
+                throw new DomainException('Bạn không thể tự mua sản phẩm do chính mình đăng bán.');
+            }
+
+            $stmt = $this->db->prepare(
+                "INSERT INTO `{$this->table}`
+                    (`order_code`, `buyer_id`, `seller_id`, `product_id`, `total_price`,
+                     `shipping_address`, `phone`, `notes`, `status`)
+                 VALUES
+                    (:order_code, :buyer_id, :seller_id, :product_id, :total_price,
+                     :shipping_address, :phone, :notes, 'pending')"
+            );
+            $stmt->execute([
+                'order_code' => $orderCode,
+                'buyer_id' => $buyerId,
+                'seller_id' => $product['user_id'],
+                'product_id' => $productId,
+                'total_price' => $product['price'],
+                'shipping_address' => $shippingAddress,
+                'phone' => $phone,
+                'notes' => $notes
+            ]);
+
+            $orderId = (int)$this->db->lastInsertId();
+            $stmt = $this->db->prepare(
+                "UPDATE `products` SET `status` = 'reserved' WHERE `id` = :id AND `status` = 'available'"
+            );
+            $stmt->execute(['id' => $productId]);
+
+            if ($stmt->rowCount() !== 1) {
+                throw new DomainException('Sản phẩm vừa được người khác đặt mua. Vui lòng tải lại trang.');
+            }
+
+            $this->db->commit();
+            return $orderId;
+        } catch (Throwable $exception) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $exception;
+        }
+    }
+
+    /**
+     * Chỉ cho phép chuyển trạng thái phù hợp với vai trò và trạng thái hiện tại.
+     */
+    public function transitionStatus(int $orderId, int $userId, string $nextStatus): void {
+        $this->db->beginTransaction();
+
+        try {
+            $stmt = $this->db->prepare(
+                "SELECT `buyer_id`, `seller_id`, `product_id`, `status`
+                 FROM `{$this->table}` WHERE `id` = :id FOR UPDATE"
+            );
+            $stmt->execute(['id' => $orderId]);
+            $order = $stmt->fetch();
+
+            if (!$order) {
+                throw new DomainException('Không tìm thấy đơn hàng.');
+            }
+
+            $isSeller = (int)$order['seller_id'] === $userId;
+            $isBuyer = (int)$order['buyer_id'] === $userId;
+            $allowedTransitions = $isSeller
+                ? [
+                    'pending' => ['confirmed', 'cancelled'],
+                    'confirmed' => ['shipping', 'cancelled'],
+                    'shipping' => ['completed']
+                ]
+                : ($isBuyer
+                    ? ['pending' => ['cancelled'], 'confirmed' => ['cancelled']]
+                    : []);
+
+            if (!in_array($nextStatus, $allowedTransitions[$order['status']] ?? [], true)) {
+                throw new DomainException('Bạn không thể thực hiện chuyển trạng thái này.');
+            }
+
+            $stmt = $this->db->prepare(
+                "UPDATE `{$this->table}` SET `status` = :status
+                 WHERE `id` = :id AND `status` = :current_status"
+            );
+            $stmt->execute([
+                'status' => $nextStatus,
+                'id' => $orderId,
+                'current_status' => $order['status']
+            ]);
+
+            if ($nextStatus === 'completed' || $nextStatus === 'cancelled') {
+                $productStatus = $nextStatus === 'completed' ? 'sold' : 'available';
+                $stmt = $this->db->prepare(
+                    "UPDATE `products` SET `status` = :product_status
+                     WHERE `id` = :id AND `status` = 'reserved'"
+                );
+                $stmt->execute([
+                    'product_status' => $productStatus,
+                    'id' => $order['product_id']
+                ]);
+
+                if ($stmt->rowCount() !== 1) {
+                    throw new DomainException('Trạng thái sản phẩm không còn phù hợp với đơn hàng.');
+                }
+            }
+
+            $this->db->commit();
+        } catch (Throwable $exception) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $exception;
+        }
+    }
 
     /**
      * Lấy danh sách đơn hàng đã mua của người mua
@@ -73,4 +211,3 @@ class Order extends Model {
         return $this->update($orderId, ['status' => $status]);
     }
 }
-
