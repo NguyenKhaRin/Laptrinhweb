@@ -74,6 +74,9 @@ $currentUser = $_SESSION['user'] ?? null;
                                 <div class="text-muted small"><?= htmlspecialchars($currentUser['email']) ?></div>
                             </li>
                             <li><a class="dropdown-item" href="<?= BASE_URL ?>/profile/seller/<?= $currentUser['id'] ?>"><i class="bi bi-person me-2"></i>Trang cá nhân</a></li>
+                            <?php if (($currentUser['role'] ?? '') === 'admin'): ?>
+                                <li><a class="dropdown-item text-danger fw-bold" href="<?= BASE_URL ?>/admin"><i class="bi bi-speedometer2 me-2"></i>Bảng Quản Trị (Admin)</a></li>
+                            <?php endif; ?>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item text-danger" href="<?= BASE_URL ?>/logout"><i class="bi bi-box-arrow-right me-2"></i>Đăng xuất</a></li>
                         </ul>

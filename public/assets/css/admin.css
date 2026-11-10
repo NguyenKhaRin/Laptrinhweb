@@ -1,0 +1,39 @@
+/**
+ * ========================================================
+ * ADMIN CSS - GIAO DIỆN BẢNG ĐIỀU KHIỂN QUẢN TRỊ VIÊN
+ * Phụ trách bởi: TV5 (Frontend Engineer 2)
+ * ========================================================
+ */
+
+.admin-card-stat {
+    border-left: 4px solid var(--primary-color);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.admin-card-stat:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08) !important;
+}
+
+.table th {
+    font-weight: 700;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+}
+
+.badge-role-admin {
+    background-color: #dc3545;
+    color: #fff;
+}
+
+.badge-role-seller {
+    background-color: #198754;
+    color: #fff;
+}
+
+.badge-role-buyer {
+    background-color: #0d6efd;
+    color: #fff;
+}

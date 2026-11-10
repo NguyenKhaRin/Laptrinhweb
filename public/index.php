@@ -37,11 +37,13 @@ require_once ROOT_DIR . '/app/Config/database.php';
 
 use App\Core\Router;
 use App\Core\AuthMiddleware;
+use App\Core\AdminMiddleware;
 use App\Controllers\AuthController;
 use App\Controllers\ProductController;
 use App\Controllers\ChatController;
 use App\Controllers\OrderController;
 use App\Controllers\ReviewController;
+use App\Controllers\AdminController;
 
 // ========================================================
 // ĐĂNG KÝ DANH SÁCH ROUTE (ĐIỀU HƯỚNG URL)
@@ -80,6 +82,14 @@ Router::post('/orders/update-status', [OrderController::class, 'updateStatus'], 
 // 5. Module Đánh giá (Review)
 Router::post('/reviews/store', [ReviewController::class, 'store'], [AuthMiddleware::class]);
 Router::get('/profile/reviews/{seller_id}', [ReviewController::class, 'sellerReviews']);
+
+// 6. Module Quản trị Admin (TV1 & TV5)
+Router::get('/admin', [AdminController::class, 'dashboard'], [AdminMiddleware::class]);
+Router::get('/admin/dashboard', [AdminController::class, 'dashboard'], [AdminMiddleware::class]);
+Router::get('/admin/users', [AdminController::class, 'users'], [AdminMiddleware::class]);
+Router::post('/admin/users/update-role', [AdminController::class, 'updateRole'], [AdminMiddleware::class]);
+Router::get('/admin/products', [AdminController::class, 'products'], [AdminMiddleware::class]);
+Router::post('/admin/products/delete/{id}', [AdminController::class, 'deleteProduct'], [AdminMiddleware::class]);
 
 // ========================================================
 // TÍNH TOÁN REQUEST URI VÀ DISPATCH ROUTER
