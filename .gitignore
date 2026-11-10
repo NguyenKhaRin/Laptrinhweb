@@ -1,0 +1,17 @@
+# Environment & credentials
+.env
+
+# Uploads (ignore uploaded content, keep directory structure)
+/public/uploads/products/*
+!/public/uploads/products/.gitkeep
+/public/uploads/avatars/*
+!/public/uploads/avatars/.gitkeep
+
+# Temporary & system files
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
+vendor/
+

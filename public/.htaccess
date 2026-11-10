@@ -1,0 +1,11 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Không can thiệp nếu đường dẫn trỏ tới file hoặc thư mục thật (ảnh, css, js)
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+
+    # Điều hướng toàn bộ request vào index.php (Front Controller)
+    RewriteRule ^(.*)$ index.php [QSA,L]
+</IfModule>
+

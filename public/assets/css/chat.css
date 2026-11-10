@@ -1,0 +1,82 @@
+/**
+ * ========================================================
+ * CHAT CSS - GIAO DIỆN KHUNG CHAT & TIN NHẮN REAL-TIME
+ * Phụ trách bởi: Thành viên phụ trách Module Chat
+ * ========================================================
+ */
+
+.chat-container-card {
+    height: 75vh;
+    min-height: 520px;
+}
+
+.conversation-sidebar {
+    height: 100%;
+}
+
+.conversation-list {
+    max-height: calc(75vh - 65px);
+}
+
+.conversation-list .list-group-item {
+    transition: background-color 0.15s ease;
+    border-left: 3px solid transparent;
+}
+
+.conversation-list .list-group-item:hover {
+    background-color: #f8f9fa;
+}
+
+.conversation-list .list-group-item.active-chat {
+    background-color: #e7f1ff;
+    border-left-color: var(--primary-color);
+}
+
+.chat-main-area {
+    height: 100%;
+}
+
+.message-box {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Tin nhắn của tôi (Bên phải) */
+.message-bubble-mine {
+    align-self: flex-end;
+    background-color: #0d6efd;
+    color: #ffffff;
+    border-radius: 18px 18px 4px 18px;
+    padding: 10px 16px;
+    max-width: 70%;
+    word-break: break-word;
+    box-shadow: 0 2px 4px rgba(13, 110, 253, 0.2);
+}
+
+.message-bubble-mine .message-time {
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 11px;
+    margin-top: 4px;
+    text-align: right;
+}
+
+/* Tin nhắn của đối tác (Bên trái) */
+.message-bubble-partner {
+    align-self: flex-start;
+    background-color: #ffffff;
+    color: #212529;
+    border-radius: 18px 18px 18px 4px;
+    padding: 10px 16px;
+    max-width: 70%;
+    word-break: break-word;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.message-bubble-partner .message-time {
+    color: #8c8c8c;
+    font-size: 11px;
+    margin-top: 4px;
+}
+

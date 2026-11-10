@@ -1,0 +1,45 @@
+/**
+ * ========================================================
+ * PRODUCTS CSS - GIAO DIỆN SẢN PHẨM & TÌM KIẾM
+ * Phụ trách bởi: Thành viên phụ trách Module Sản phẩm
+ * ========================================================
+ */
+
+.product-card {
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.product-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08) !important;
+}
+
+.product-img-wrapper {
+    position: relative;
+    width: 100%;
+    height: 200px;
+    background-color: #f1f3f5;
+    overflow: hidden;
+}
+
+.product-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+}
+
+.product-card:hover .product-img {
+    transform: scale(1.05);
+}
+
+.detail-product-image {
+    max-height: 480px;
+    object-fit: cover;
+    background-color: #e9ecef;
+}
+
+.max-w-100 {
+    max-width: 100%;
+}
+

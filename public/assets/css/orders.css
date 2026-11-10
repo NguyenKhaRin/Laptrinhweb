@@ -1,0 +1,22 @@
+/**
+ * ========================================================
+ * ORDERS CSS - GIAO DIỆN QUẢN LÝ ĐƠN HÀNG & ĐÁNH GIÁ
+ * Phụ trách bởi: Thành viên phụ trách Module Đơn & Đánh giá
+ * ========================================================
+ */
+
+.order-card {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    border: 1px solid #f0f0f0;
+}
+
+.order-card:hover {
+    border-color: #d0e2ff;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Rating stars */
+.rating-stars {
+    user-select: none;
+}
+
